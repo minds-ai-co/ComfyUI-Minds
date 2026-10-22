@@ -1,0 +1,53 @@
+name: ComfyUI node pack
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  response-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix scripts/widget-build
+      - run: scripts/widget-build/node_modules/.bin/playwright install --with-deps chromium
+      - run: node scripts/test_response_layout.mjs
+      - run: node scripts/test_inputs_browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ComfyUI-response-layout
+          path: /tmp/minds-comfy-response-layout
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r requirements.txt ruff numpy
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: ruff check . && ruff format --check .
+      - run: python -m unittest discover -s tests -v
+        env:
+          PYTHONPATH: .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/*.test.mjs
+      - run: python scripts/package.py /tmp/ComfyUI-Minds.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ComfyUI-Minds-${{ matrix.python }}
+          path: /tmp/ComfyUI-Minds.zip
